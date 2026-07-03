@@ -1,4 +1,4 @@
-local Rayfield = loadstring(game:HttpGet('local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/dcyqo/Rayfield/refs/heads/main/source.lua"))()
+local Rayfield = loadstring(game:HttpGet('loadstring(game:HttpGet("https://raw.githubusercontent.com/dcyqo/Rayfield/refs/heads/main/source.lua"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "Скрипт: Мурино Хоррор",
