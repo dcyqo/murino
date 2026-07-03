@@ -22,29 +22,17 @@ local IsTeleporting = false
 local FullBrightEnabled = false
 local NoclipEnabled = false
 local TargetSpeed = 16
-
 local FlyEnabled = false
 local FlySpeed = 50
-
 local FlickSoundID = "rbxassetid://118519596761992"
 
 local Lighting = game:GetService("Lighting")
-local DefaultSettings = {
-    Ambient = Lighting.Ambient,
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    GlobalShadows = Lighting.GlobalShadows,
-    OutdoorAmbient = Lighting.OutdoorAmbient
-}
+local DefaultSettings = { Ambient = Lighting.Ambient, Brightness = Lighting.Brightness, ClockTime = Lighting.ClockTime, FogEnd = Lighting.FogEnd, GlobalShadows = Lighting.GlobalShadows, OutdoorAmbient = Lighting.OutdoorAmbient }
 
-local BodyVelocity = nil
-local BodyGyro = nil
-local FlyConnection = nil
+local BodyVelocity, BodyGyro, FlyConnection = nil, nil, nil
 local ArturDebounce = false
 
--- ==================== ФУНКЦИИ ====================
-
+-- Функции
 local function ApplyFullBright()
     if FullBrightEnabled then
         Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -60,121 +48,124 @@ local function StopFlying()
     if FlyConnection then FlyConnection:Disconnect() FlyConnection = nil end
     if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
     if BodyGyro then BodyGyro:Destroy() BodyGyro = nil end
-    local character = game.Players.LocalPlayer.Character
-    if character and character:FindFirstChild("Humanoid") then
-        character.Humanoid.PlatformStand = false
-    end
+    local char = game.Players.LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
 end
 
 local function StartFlying()
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-
-    local root = character.HumanoidRootPart
-    local humanoid = character:FindFirstChild("Humanoid")
-
+    local char = game.Players.LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
+    local hum = char:FindFirstChild("Humanoid")
     StopFlying()
 
     BodyVelocity = Instance.new("BodyVelocity")
-    BodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-    BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    BodyVelocity.MaxForce = Vector3.new(1e5,1e5,1e5)
     BodyVelocity.Parent = root
 
     BodyGyro = Instance.new("BodyGyro")
-    BodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    BodyGyro.MaxTorque = Vector3.new(1e5,1e5,1e5)
     BodyGyro.P = 12500
-    BodyGyro.D = 1000
     BodyGyro.Parent = root
 
-    humanoid.PlatformStand = true
+    hum.PlatformStand = true
 
     FlyConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        if not FlyEnabled or not root.Parent then 
-            StopFlying()
-            return 
-        end
-
-        local moveDirection = Vector3.new(0, 0, 0)
-        local camera = workspace.CurrentCamera
+        if not FlyEnabled or not root.Parent then StopFlying() return end
+        local move = Vector3.new(0,0,0)
+        local cam = workspace.CurrentCamera
         local uis = game:GetService("UserInputService")
-        local humanoid = character:FindFirstChild("Humanoid")
 
-        -- ПК управление
-        if uis:IsKeyDown(Enum.KeyCode.W) then moveDirection += camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.S) then moveDirection -= camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.A) then moveDirection -= camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.D) then moveDirection += camera.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.W) then move += cam.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.S) then move -= cam.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.A) then move -= cam.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.D) then move += cam.CFrame.RightVector end
 
-        -- Мобильное управление (исправлено)
-        if humanoid and humanoid.MoveDirection.Magnitude > 0 then
-            moveDirection += camera.CFrame.LookVector * humanoid.MoveDirection.Z
-            moveDirection += camera.CFrame.RightVector * humanoid.MoveDirection.X
+        if hum.MoveDirection.Magnitude > 0 then
+            move += cam.CFrame.LookVector * hum.MoveDirection.Z
+            move += cam.CFrame.RightVector * hum.MoveDirection.X
         end
 
-        -- Вертикаль
-        if uis:IsKeyDown(Enum.KeyCode.Space) then moveDirection += Vector3.new(0,1,0) end
-        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then moveDirection -= Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
 
-        if moveDirection.Magnitude > 0 then
-            moveDirection = moveDirection.Unit
-        end
-
-        BodyVelocity.Velocity = moveDirection * FlySpeed
-        BodyGyro.CFrame = camera.CFrame
+        if move.Magnitude > 0 then move = move.Unit end
+        BodyVelocity.Velocity = move * FlySpeed
+        BodyGyro.CFrame = cam.CFrame
     end)
 end
 
--- ... (остальные функции TeleportToShkaf, HandleFlick, HandleArtur оставь как были)
-
--- ==================== RunService ====================
-
-game:GetService("RunService").Stepped:Connect(function()
-    local player = game.Players.LocalPlayer
-    local character = player.Character
-    if character and character:FindFirstChild("Humanoid") then
-        local humanoid = character.Humanoid
-        local currentTargetSpeed = TargetSpeed
-        if IsTeleporting then currentTargetSpeed = 0 end
-        if humanoid.WalkSpeed ~= currentTargetSpeed then
-            humanoid.WalkSpeed = currentTargetSpeed
+local function TeleportToShkaf()
+    if IsTeleporting then return end
+    IsTeleporting = true
+    local char = game.Players.LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        local closest, minDist = nil, math.huge
+        for _, obj in workspace:GetDescendants() do
+            if obj.Name == "Shkaf" and obj:IsA("Model") then
+                local pos = obj:GetPivot().Position
+                local dist = (hrp.Position - pos).Magnitude
+                if dist < minDist then minDist = dist closest = obj end
+            end
         end
+        if closest then
+            hrp.Anchored = true
+            hrp.CFrame = closest:GetPivot()
+            task.wait(0.1)
+            local prompt = closest:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then fireproximityprompt(prompt) end
+            hrp.Anchored = false
+        end
+    end
+    task.wait(2)
+    IsTeleporting = false
+end
+
+local function HandleFlick(sound)
+    if sound:IsA("Sound") and sound.SoundId == FlickSoundID and AutoHideRushDrunsEnabled then
+        TeleportToShkaf()
+    end
+end
+
+local function HandleArtur(arturObj)
+    if not AutoHiEnabled or ArturDebounce then return end
+    ArturDebounce = true
+    IsTeleporting = true
+    task.wait(1.5)
+    ArturDebounce = false
+    IsTeleporting = false
+end
+
+-- RunService
+game:GetService("RunService").Stepped:Connect(function()
+    local char = game.Players.LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        local hum = char.Humanoid
+        local speed = IsTeleporting and 0 or TargetSpeed
+        hum.WalkSpeed = speed
     end
 end)
 
--- ==================== UI ====================
+workspace.DescendantAdded:Connect(function(child)
+    HandleFlick(child)
+    if child.Name == "Artur" then task.wait(0.2) HandleArtur(child) end
+end)
 
-TabGame:CreateSlider({
-    Name = "Скорость ходьбы✓",
-    Range = {16, 100},
-    Increment = 1,
-    Suffix = "Speed",
-    CurrentValue = 16,
-    Callback = function(Value) TargetSpeed = Value end,
-})
+Lighting.Changed:Connect(function()
+    if FullBrightEnabled then ApplyFullBright() end
+end)
 
-TabGame:CreateToggle({ Name = "Полное освещение✓", CurrentValue = false, Callback = function(Value) FullBrightEnabled = Value if not Value then Lighting.Ambient = DefaultSettings.Ambient Lighting.Brightness = DefaultSettings.Brightness Lighting.OutdoorAmbient = DefaultSettings.OutdoorAmbient else ApplyFullBright() end end })
+-- UI
+TabGame:CreateSlider({Name = "Скорость ходьбы✓", Range = {16, 100}, Increment = 1, Suffix = "Speed", CurrentValue = 16, Callback = function(v) TargetSpeed = v end})
+TabGame:CreateToggle({Name = "Полное освещение✓", CurrentValue = false, Callback = function(v) FullBrightEnabled = v if not v then for k,v in DefaultSettings do Lighting[k] = v end else ApplyFullBright() end end})
+TabGame:CreateToggle({Name = "Сквозь препятствия✓", CurrentValue = false, Callback = function(v) NoclipEnabled = v end})
+TabGame:CreateToggle({Name = "Полёт ✓", CurrentValue = false, Callback = function(v) FlyEnabled = v if v then StartFlying() else StopFlying() end end})
+TabGame:CreateSlider({Name = "Скорость полёта", Range = {20, 200}, Increment = 1, Suffix = "Stud/s", CurrentValue = 50, Callback = function(v) FlySpeed = v end})
 
-TabGame:CreateToggle({ Name = "Сквозь препятствия✓", CurrentValue = false, Callback = function(Value) NoclipEnabled = Value end })
+TabMonster:CreateToggle({Name = "Авто | Приветствие Артура", CurrentValue = false, Callback = function(v) AutoHiEnabled = v end})
+TabMonster:CreateToggle({Name = "Авто | Укрытие от раш-друна (Исправно)✓", CurrentValue = false, Callback = function(v) AutoHideRushDrunsEnabled = v end})
 
-TabGame:CreateToggle({
-    Name = "Полёт ✓",
-    CurrentValue = false,
-    Callback = function(Value)
-        FlyEnabled = Value
-        if FlyEnabled then StartFlying() else StopFlying() end
-    end,
-})
-
-TabGame:CreateSlider({
-    Name = "Скорость полёта",
-    Range = {20, 200},
-    Increment = 1,
-    Suffix = "Stud/s",
-    CurrentValue = 50,
-    Callback = function(Value) FlySpeed = Value end,
-})
-
--- Монстры и Основное (оставь как было)
+TabMain:CreateButton({Name = "Discord Server", Callback = function() setclipboard("https://discord.gg/ТВОЯ_ССЫЛКА") Rayfield:Notify({Title = "Скопировано", Content = "Ссылка в буфере", Duration = 5}) end})
 
 print("Мурино Хоррор скрипт загружен!")
