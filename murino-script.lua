@@ -1,3 +1,5 @@
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/dcyqo/Rayfield/main/source.lua"))()
+
 local Window = Rayfield:CreateWindow({
     Name = "Скрипт: Мурино Хоррор",
     LoadingTitle = "C00Lfloppa Panel",
