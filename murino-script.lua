@@ -1,5 +1,5 @@
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/dcyqo/Rayfield/main/source.lua"))()
- 
+
 local Window = Rayfield:CreateWindow({
     Name = "Скрипт: Мурино Хоррор",
     LoadingTitle = "C00Lfloppa Panel",
@@ -41,6 +41,7 @@ local DefaultSettings = {
 local BodyVelocity = nil
 local BodyGyro = nil
 local FlyConnection = nil
+local ArturDebounce = false   -- Добавлено
 
 -- ==================== ФУНКЦИИ ====================
 
@@ -56,13 +57,9 @@ local function ApplyFullBright()
 end
 
 local function StopFlying()
-    if FlyConnection then
-        FlyConnection:Disconnect()
-        FlyConnection = nil
-    end
+    if FlyConnection then FlyConnection:Disconnect() FlyConnection = nil end
     if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
     if BodyGyro then BodyGyro:Destroy() BodyGyro = nil end
-
     local character = game.Players.LocalPlayer.Character
     if character and character:FindFirstChild("Humanoid") then
         character.Humanoid.PlatformStand = false
@@ -80,13 +77,11 @@ local function StartFlying()
     StopFlying()
 
     BodyVelocity = Instance.new("BodyVelocity")
-    BodyVelocity.Name = "FlyVelocity"
     BodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
     BodyVelocity.Velocity = Vector3.new(0, 0, 0)
     BodyVelocity.Parent = root
 
     BodyGyro = Instance.new("BodyGyro")
-    BodyGyro.Name = "FlyGyro"
     BodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
     BodyGyro.P = 12500
     BodyGyro.D = 1000
@@ -103,30 +98,22 @@ local function StartFlying()
         local moveDirection = Vector3.new(0, 0, 0)
         local camera = workspace.CurrentCamera
         local uis = game:GetService("UserInputService")
+        local hum = character:FindFirstChild("Humanoid")
 
-        -- ПК управление (WASD)
+        -- ПК
         if uis:IsKeyDown(Enum.KeyCode.W) then moveDirection += camera.CFrame.LookVector end
         if uis:IsKeyDown(Enum.KeyCode.S) then moveDirection -= camera.CFrame.LookVector end
         if uis:IsKeyDown(Enum.KeyCode.A) then moveDirection -= camera.CFrame.RightVector end
         if uis:IsKeyDown(Enum.KeyCode.D) then moveDirection += camera.CFrame.RightVector end
 
-        -- Мобильное управление (джойстик)
-        if humanoid.MoveDirection.Magnitude > 0 then
-            moveDirection += camera.CFrame:VectorToWorldSpace(humanoid.MoveDirection)
+        -- Мобильное + 1-е лицо
+        if hum and hum.MoveDirection.Magnitude > 0 then
+            moveDirection += camera.CFrame.LookVector * hum.MoveDirection.Z
+            moveDirection += camera.CFrame.RightVector * hum.MoveDirection.X
         end
 
-        -- Вертикальное управление
-        if uis:IsKeyDown(Enum.KeyCode.Space) then 
-            moveDirection += Vector3.new(0,1,0) 
-        end
-        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then 
-            moveDirection -= Vector3.new(0,1,0) 
-        end
-
-        -- На мобильных можно использовать прыжок для подъёма (если есть)
-        if humanoid.Jump then
-            moveDirection += Vector3.new(0,1,0)
-        end
+        if uis:IsKeyDown(Enum.KeyCode.Space) then moveDirection += Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then moveDirection -= Vector3.new(0,1,0) end
 
         if moveDirection.Magnitude > 0 then
             moveDirection = moveDirection.Unit
@@ -140,14 +127,12 @@ end
 local function TeleportToShkaf()
     if IsTeleporting then return end
     IsTeleporting = true
-    
     local player = game.Players.LocalPlayer
     local character = player.Character
     if character and character:FindFirstChild("HumanoidRootPart") then
         local hrp = character.HumanoidRootPart
         local closestShkaf = nil
         local minDistance = math.huge
-        
         for _, obj in ipairs(workspace:GetDescendants()) do
             if obj.Name == "Shkaf" and obj:IsA("Model") then
                 local success, pos = pcall(function() return obj:GetPivot().Position end)
@@ -160,7 +145,6 @@ local function TeleportToShkaf()
                 end
             end
         end
-        
         if closestShkaf then
             hrp.Anchored = true
             hrp.CFrame = closestShkaf:GetPivot()
@@ -173,54 +157,58 @@ local function TeleportToShkaf()
             hrp.Anchored = false
         end
     end
-    
     task.wait(2) 
     IsTeleporting = false
 end
 
 local function HandleFlick(sound)
     if sound:IsA("Sound") and sound.SoundId == FlickSoundID then
+        if sound.IsPlaying and AutoHideRushDrunsEnabled then TeleportToShkaf() end
         sound:GetPropertyChangedSignal("IsPlaying"):Connect(function()
-            if sound.IsPlaying and AutoHideRushDrunsEnabled then
-                TeleportToShkaf()
-            end
+            if sound.IsPlaying and AutoHideRushDrunsEnabled then TeleportToShkaf() end
         end)
-        if sound.IsPlaying and AutoHideRushDrunsEnabled then
-            TeleportToShkaf()
-        end
     end
 end
 
 local function HandleArtur(arturObj)
-    if not AutoHiEnabled or IsTeleporting then return end
+    if not AutoHiEnabled or ArturDebounce or IsTeleporting then return end
+    ArturDebounce = true
     IsTeleporting = true
-    
+
     local player = game.Players.LocalPlayer
     local character = player.Character
-    
     if character and character:FindFirstChild("HumanoidRootPart") then
         local hrp = character.HumanoidRootPart
         local oldPos = hrp.CFrame
-        
-        local function executeTeleport()
-            if not arturObj or not arturObj.Parent then return end
+        local attempts = 0
+
+        while attempts < 3 and arturObj and arturObj.Parent do
+            attempts += 1
             hrp.Anchored = true
-            local endTime = os.clock() + 1
-            while os.clock() < endTime do
-                if not arturObj or not arturObj.Parent then break end
-                local success, targetPivot = pcall(function() return arturObj:GetPivot() end)
-                if success then
-                    local offsetCFrame = targetPivot * CFrame.new(0, 0, -4)
-                    hrp.CFrame = CFrame.lookAt(offsetCFrame.Position, targetPivot.Position)
-                end
-                task.wait(0.05)
+            local success, targetPivot = pcall(function() return arturObj:GetPivot() end)
+            if success then
+                local offsetCFrame = targetPivot * CFrame.new(0, 0, -4)
+                hrp.CFrame = CFrame.lookAt(offsetCFrame.Position, targetPivot.Position)
             end
-            hrp.Anchored = false
-            hrp.CFrame = oldPos
+
+            for _, obj in ipairs(arturObj:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") then
+                    pcall(function()
+                        obj.RequiresLineOfSight = false
+                        obj.MaxActivationDistance = 100
+                        obj.HoldDuration = 0
+                        fireproximityprompt(obj)
+                    end)
+                end
+            end
+            task.wait(0.8)
         end
-        executeTeleport()
+
+        hrp.Anchored = false
+        hrp.CFrame = oldPos
     end
-    task.wait(0.5)
+    task.wait(1)
+    ArturDebounce = false
     IsTeleporting = false
 end
 
@@ -229,24 +217,11 @@ end
 game:GetService("RunService").Stepped:Connect(function()
     local player = game.Players.LocalPlayer
     local character = player.Character
-    if character then
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if NoclipEnabled then
-                    part.CanCollide = false
-                else
-                    if part.Name == "HumanoidRootPart" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "Torso" then
-                        part.CanCollide = true
-                    end
-                end
-            end
-        end
-        if character:FindFirstChild("Humanoid") then
-            local currentTargetSpeed = TargetSpeed
-            if IsTeleporting then currentTargetSpeed = 0 end
-            if character.Humanoid.WalkSpeed ~= currentTargetSpeed then
-                character.Humanoid.WalkSpeed = currentTargetSpeed
-            end
+    if character and character:FindFirstChild("Humanoid") then
+        local humanoid = character.Humanoid
+        local currentTargetSpeed = IsTeleporting and 0 or TargetSpeed
+        if humanoid.WalkSpeed ~= currentTargetSpeed then
+            humanoid.WalkSpeed = currentTargetSpeed
         end
     end
 end)
@@ -254,7 +229,7 @@ end)
 workspace.DescendantAdded:Connect(function(child)
     HandleFlick(child)
     if child.Name == "Artur" then
-        task.wait(0.1)
+        task.wait(0.2)
         HandleArtur(child)
     end
 end)
@@ -264,9 +239,7 @@ for _, v in ipairs(game:GetDescendants()) do
 end
 
 Lighting.Changed:Connect(function()
-    if FullBrightEnabled then
-        ApplyFullBright()
-    end
+    if FullBrightEnabled then ApplyFullBright() end
 end)
 
 -- ==================== UI ====================
@@ -277,17 +250,12 @@ TabGame:CreateToggle({ Name = "Полное освещение✓", CurrentValue
 
 TabGame:CreateToggle({ Name = "Сквозь препятствия✓", CurrentValue = false, Callback = function(Value) NoclipEnabled = Value end })
 
--- === Полёт (с поддержкой мобильных) ===
 TabGame:CreateToggle({
     Name = "Полёт ✓",
     CurrentValue = false,
     Callback = function(Value)
         FlyEnabled = Value
-        if FlyEnabled then
-            StartFlying()
-        else
-            StopFlying()
-        end
+        if FlyEnabled then StartFlying() else StopFlying() end
     end,
 })
 
@@ -300,13 +268,12 @@ TabGame:CreateSlider({
     Callback = function(Value) FlySpeed = Value end,
 })
 
-TabMonster:CreateToggle({ Name = "Авто | Приветствие Артура (Поломано)✗", CurrentValue = false, Callback = function(Value) AutoHiEnabled = Value end })
+TabMonster:CreateToggle({ Name = "Авто | Приветствие Артура", CurrentValue = false, Callback = function(Value) AutoHiEnabled = Value end })
 TabMonster:CreateToggle({ Name = "Авто | Укрытие от раш-друна (Исправно)✓", CurrentValue = false, Callback = function(Value) AutoHideRushDrunsEnabled = Value end })
 
--- Основное вкладка (без изменений)
 TabMain:CreateParagraph({ Title = "ЙОУ😎", Content = "Привет, Друн!\n\nЯ очень благодарен тебе за использование моего скрипта." })
 TabMain:CreateParagraph({ Title = "ПРАВИЛА СОГЛАШЕНИЯ", Content = "ЗАПУСКАЯ СКРИПТ ВЫ АВТОМАТИЧЕСКИ СОГЛАШАЕТЕСЬ С ПРАВИЛАМИ..." })
 TabMain:CreateParagraph({ Title = "ОБНОВЛЕНИЯ", Content = "Все обновления скрипта будут выходить в Discord сервере – discord.gg/VbwR3pmNAb" })
-TabMain:CreateParagraph({ Title = "❔ВЕРСИЯ", Content = "v0.6 | Alpha script" })
+TabMain:CreateParagraph({ Title = "❔ВЕРСИЯ", Content = "v0.7 | Alpha script" })
 TabMain:CreateLabel("✓ – Значит полностью рабочий.\n× – Значит неполностью/полностью нерабочий")
 TabMain:CreateButton({ Name = "Discord Server", Callback = function() setclipboard("https://discord.gg/VbwR3pmNAb") Rayfield:Notify({Title = "Invited in Discord", Content = "Ссылка скопирована!", Duration = 5}) end })
